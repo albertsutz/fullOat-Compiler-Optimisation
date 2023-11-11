@@ -1,0 +1,17 @@
+opam-version: "2.0"
+version: "1.0"
+license: "MIT"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+install: [ make ]
+depends: [ ]
+
+description: "Homework for Yale-NUS College module on Programming Language Design and Implementation (YSC3208)"
+
+tags: [
+  "category:Computer Science/Education/Programming Languages and Compilers"
+  "keyword:data structures"
+  "keyword:algorithms"
+]
