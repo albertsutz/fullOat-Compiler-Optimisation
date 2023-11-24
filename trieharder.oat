@@ -1,0 +1,108 @@
+struct TrieNode {
+    bool terminate;
+    int value;
+    TrieNode?[] children 
+}
+
+TrieNode createTrie() {
+    var children = new TrieNode?[] {
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null ,
+        TrieNode null 
+    };
+    var trie = new TrieNode{terminate = false; value = -1; children=children}; 
+    return trie; 
+}
+
+void insertNode(TrieNode node, int[] word, int index, int len) { 
+    if (index == len) {
+        node.terminate = true; 
+        return; 
+    }
+    var char = word[index];
+    var child = node.children[char];  
+
+    if? (TrieNode x = child) {
+    } else {
+        node.children[char] = createTrie();
+    }
+
+    var newChild = node.children[char]; 
+    if? (TrieNode nnewChild = newChild) {
+        insertNode(nnewChild, word, index + 1, len);
+    } else {
+        return;
+    }
+    return; 
+}
+
+bool search(TrieNode node, int[] word, int index, int len) {
+    if (index == len) {
+        return node.terminate; 
+    }
+
+    var char = word[index];
+    var child = node.children[char]; 
+
+    if? (TrieNode x = child) {
+        return search(x, word, index + 1, len);
+    } 
+    return false;
+}
+
+int program(int argc, string[] argv) {
+    var root = createTrie(); 
+    insertNode(root, new int[]{9,5,1,4,2,8,1,0,3,6,7,2}, 0, 12);
+    insertNode(root, new int[]{3,8,5,2,9,1,2,6,4,7,0,1}, 0, 12);
+    insertNode(root, new int[]{7,8,6,5,2,3,4,0,1,9,2,3}, 0, 12);
+    insertNode(root, new int[]{6,8,4,2,1,0,3,5,7,9,1,2}, 0, 12);
+    insertNode(root, new int[]{0,2,7,3,8,5,9,1,6,4,2,3}, 0, 12);
+    insertNode(root, new int[]{3,1,4,6,0,2,8,9,7,5,2,3}, 0, 12);
+    insertNode(root, new int[]{9,0,5,1,3,8,6,2,4,7,2,1}, 0, 12);
+    insertNode(root, new int[]{8,3,5,0,9,4,2,1,6,7,1,2}, 0, 12);
+    insertNode(root, new int[]{3,5,2,6,9,7,8,4,1,0,2,3}, 0, 12);
+    insertNode(root, new int[]{6,0,2,8,4,1,3,7,9,5,2,3}, 0, 12);
+    insertNode(root, new int[]{1,9,0,8,3,5,4,6,7,2,2,1}, 0, 12);
+    insertNode(root, new int[]{8,3,6,5,1,0,7,4,2,9,2,3}, 0, 12);
+    insertNode(root, new int[]{7,2,1,4,3,9,8,6,0,5,2,3}, 0, 12);
+    insertNode(root, new int[]{5,3,8,2,1,4,6,9,0,7,2,1}, 0, 12);
+    insertNode(root, new int[]{9,8,4,7,3,5,0,6,2,1,2,3}, 0, 12);
+    insertNode(root, new int[]{1,4,6,2,5,3,8,9,0,7,2,3}, 0, 12);
+    insertNode(root, new int[]{7,6,9,4,3,1,5,0,8,2,2,3}, 0, 12);
+    insertNode(root, new int[]{5,4,3,2,8,0,7,6,1,9,2,3}, 0, 12);
+    insertNode(root, new int[]{7,1,6,2,5,9,4,3,8,0,2,3}, 0, 12);
+    insertNode(root, new int[]{3,7,1,5,9,4,8,2,6,0,2,3}, 0, 12);
+
+    var found_1 = false; 
+    var found_2 = false;
+    var to_search_1 = new int[]{9,5,1,4,2,8,1,0,3,6,7,2}; 
+    var to_search_2 = new int[]{9,5,1,4,2,8,1,0,3,6,7}; 
+
+    for (var i = 0; i < 1000; i = i + 1;) {
+        for (var j = 0; j < 1000; j = j + 1;) {
+            found_1 = search(root, to_search_1, 0, 12);
+            found_2 = search(root, to_search_2, 0, 11); 
+        }
+    }
+
+    if (found_1) {
+        print_string("YES");
+    } else {
+        print_string("NO");
+    }
+
+    if (found_2) {
+        print_string("YES");
+    } else {
+        print_string("NO");
+    }
+    
+    return 0;
+}
