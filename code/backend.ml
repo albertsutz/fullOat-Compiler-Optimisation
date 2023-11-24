@@ -781,7 +781,59 @@ let print_g {interference; precolored; preference} =
 
 
 let better_layout (f:Ll.fdecl) (live:liveness) : layout =
-  failwith "Backend.better_layout not implemented"
+  let n_arg = ref 0 in
+  let n_spill = ref 0 in
+
+  let spill () = (incr n_spill; Alloc.LStk (- !n_spill)) in
+  
+  (* Allocates a destination location for an incoming function parameter.
+     Corner case: argument 3, in Rcx occupies a register used for other
+     purposes by the compiler.  We therefore always spill it.
+  *)
+  let alloc_arg () =
+    let res =
+      match arg_loc !n_arg with
+      | Alloc.LReg Rcx -> spill ()
+      | x -> x
+    in
+    incr n_arg; res
+  in
+  (* The available palette of registers.  Excludes Rax and Rcx *)
+  let pal = LocSet.(caller_save 
+                    |> remove (Alloc.LReg Rax)
+                    |> remove (Alloc.LReg Rcx)                       
+                   )
+  in
+
+  (* Allocates a uid greedily based on liveness information *)
+  let allocate lo uid =
+    let loc =
+    try
+      let used_locs =
+        UidSet.fold (fun y -> LocSet.add (List.assoc y lo)) (UidSet.filter (fun x ->UidSet.mem x
+        (live.live_out uid)) (live.live_in uid)) LocSet.empty
+      in
+      let available_locs = LocSet.diff pal used_locs in
+      LocSet.choose available_locs
+    with
+    | Not_found -> spill ()
+    in
+    Platform.verb @@ Printf.sprintf "allocated: %s <- %s\n" (Alloc.str_loc loc) uid; loc
+  in
+
+  let lo =
+    fold_fdecl
+      (fun lo (x, _) -> (x, alloc_arg())::lo)
+      (fun lo l -> (l, Alloc.LLbl (Platform.mangle l))::lo)
+      (fun lo (x, i) ->
+        if insn_assigns i 
+        then (x, allocate lo x)::lo
+        else (x, Alloc.LVoid)::lo)
+      (fun lo _ -> lo)
+      [] f in
+  { uid_loc = (fun x -> List.assoc x lo)
+  ; spill_bytes = 8 * !n_spill
+  }
 
 
 (* register allocation options ---------------------------------------------- *)

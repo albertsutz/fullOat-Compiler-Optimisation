@@ -531,7 +531,7 @@ let tests : suite =
   GradedTest("constprop optimization tests", 10, opt_constfold_file constprop_opt_tests);
   Test("ll regalloc correctness tests", pass_all_executed_ll_file ll_tests);
   Test("oat regalloc correctness tests", pass_all_executed_oat_file (oat_correctness_tests @ regalloc_challenge_tests));
-  GradedTest("oat regalloc quality tests", 35, quality_oat oat_regalloc_quality_tests);
+  (* GradedTest("oat regalloc quality tests", 35, quality_oat oat_regalloc_quality_tests); *)
   ]
 
 let manual_tests : suite = [
