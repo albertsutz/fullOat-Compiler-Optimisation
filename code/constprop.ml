@@ -113,20 +113,20 @@ module Fact =
     (* The constprop analysis should take the meet over predecessors to compute the
        flow into a node. You may find the UidM.merge function useful *)
     let combine (ds:fact list) : fact = 
+      let merge s1 s2 =
+        match s1, s2 with
+        | SymConst.NonConst, _ | _, SymConst.NonConst -> SymConst.NonConst
+        | SymConst.Const i, SymConst.Const j when Int64.compare i j == 0 -> SymConst.Const i
+        | SymConst.Const _, SymConst.Const _ -> SymConst.NonConst
+        | SymConst.UndefConst, i | i, SymConst.UndefConst -> i in 
+      
+      let merge_function k xo yo = 
+        begin match xo, yo with 
+        | None, yo | yo, None -> yo 
+        | Some x, Some y -> Some (merge x y) 
+        end in 
+
       let combine_aux d1 d2 =
-        let merge s1 s2 =
-          match s1, s2 with
-          | SymConst.NonConst, _ | _, SymConst.NonConst -> SymConst.NonConst
-          | SymConst.Const i, SymConst.Const j when Int64.compare i j == 0 -> SymConst.Const i
-          | SymConst.Const _, SymConst.Const _ -> SymConst.NonConst
-          | SymConst.UndefConst, i | i, SymConst.UndefConst -> i in 
-        
-        let merge_function k xo yo = 
-          begin match xo, yo with 
-          | None, yo | yo, None -> yo 
-          | Some x, Some y -> Some (merge x y) 
-          end in 
-        
         UidM.merge merge_function d1 d2
       in
       List.fold_left combine_aux UidM.empty ds
@@ -151,56 +151,53 @@ let analyze (g:Cfg.t) : Graph.t =
   let fg = Graph.of_cfg init cp_in g in
   Solver.solve fg
 
-let counter = ref 0
 (* run constant propagation on a cfg given analysis results ----------------- *)
 (* HINT: your cp_block implementation will probably rely on several helper 
    functions.                                                                 *)
 
-   (* BLM GUA GANTI PART INI.. *)
 let run (cg:Graph.t) (cfg:Cfg.t) : Cfg.t =
   let open SymConst in
   
-  let cp_op d o =
-    match o with
-    | Null | Const _ | Gid _ -> o
-    | Id u -> match UidM.find_or UndefConst d u with
-              | Const n -> incr counter; Ll.Const n
-              | _ -> o
+  let cp_operand d op =
+    match op with
+    | Id i -> 
+      (match UidM.find_or UndefConst d i with
+        | Const n -> Ll.Const n
+        | _ -> op)
+    | _ -> op
+    
+  in
+
+  let cp_instr cb (u,i) = 
+    let f = cp_operand (cb u) in
+    u, match i with
+       | Alloca _          -> i
+       | Load (t, op)        -> Load (t, f op)
+       | Binop (bop, t,op1, op2) -> Binop (bop, t,f op1, f op2)
+       | Icmp (cnd, t, op1, op2)  -> Icmp (cnd, t, f op1, f op2)
+       | Store (t, op1, op2)     -> Store (t, f op1, f op2)
+       | Bitcast (t1, op, t2)   -> Bitcast (t1, f op, t2)
+       | Call (t, op, args)   -> Call (t, f op, List.map (fun (t,op) -> t, f op) args)
+       | Gep (t, op, ops)      -> Gep (t, f op, List.map f ops)
   in
 
   let cp_terminator cb (id, t) : uid * terminator =
-    let f = cp_op (cb id) in
-    match t with
-    | Ret (t, Some o) -> id, Ret (t, Some (f o))
-    | Cbr (o, k, l)   -> id, Cbr (f o, k, l)
-    | Ret (_, None)
-    | Br _            -> id, t
+    let f = cp_operand (cb id) in
+    id, match t with
+    | Cbr (o, k, l)   -> Cbr (f o, k, l)
+    | Ret (t, Some o) -> Ret (t, Some (f o))
+    | Ret (_, None) | Br _ ->  t
   in
 
-  let cp_insn cb (u,i) = 
-    let f = cp_op (cb u) in
-    u, match i with
-       | Alloca _          -> i
-       | Binop (bop,t,o,p) -> Binop (bop,t,f o, f p)
-       | Load (t,o)        -> Load (t, f o)
-       | Store (t,o,p)     -> Store (t, f o, f p)
-       | Icmp (cnd,t,o,p)  -> Icmp (cnd, t, f o, f p)
-       | Call (t,o,args)   -> Call (t, f o, List.map (fun (t,o) -> t, f o) args)
-       | Bitcast (s,o,t)   -> Bitcast (s, f o, t)
-       | Gep (t,o,os)      -> Gep (t, f o, List.map f os)
-  in
-  counter := 0;
-  (* STUBWITH *)
+  
 
   let cp_block (l:Ll.lbl) (cfg:Cfg.t) : Cfg.t =
     let b = Cfg.block cfg l in
     let cb = Graph.uid_out cg l in
-    (* SOLN *)
-    let insns = List.map (cp_insn cb) b.insns in
+    let insns = List.map (cp_instr cb) b.insns in
     let term = cp_terminator cb b.term in
     Cfg.add_block l {insns; term} cfg
-    (* STUBWITH failwith "Constprop.cp_block unimplemented" *)
-  in
 
+  in
 
   LblS.fold cp_block (Cfg.nodes cfg) cfg
