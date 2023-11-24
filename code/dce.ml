@@ -21,6 +21,10 @@ open Datastructures
 
    Hint: Consider using List.filter
  *)
+let removable : insn -> bool = function
+ | Binop _ | Alloca _ | Bitcast _ | Gep _ | Load _ | Icmp _ -> true
+ | Store _ | Call _ -> false
+
 let dce_block (lb:uid -> Liveness.Fact.t) 
               (ab:uid -> Alias.fact)
               (b:Ll.block) : Ll.block =
@@ -35,7 +39,7 @@ let dce_block (lb:uid -> Liveness.Fact.t)
       UidS.find_opt (op_uid) (retrieve_set) != None
     | _ -> 
       let retrieve_set = lb cur_uid in 
-      UidS.find_opt (cur_uid) (retrieve_set) != None
+      UidS.find_opt (cur_uid) (retrieve_set) != None || not (removable cur_insn)
     end in
   let filtered_insns = List.filter (aux_func) (insns) in 
   {insns= filtered_insns; term}
