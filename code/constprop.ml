@@ -37,7 +37,57 @@ type fact = SymConst.t UidM.t
    - Uid of all other instructions are NonConst-out
  *)
 let insn_flow (u,i:uid * insn) (d:fact) : fact =
-  failwith "Constprop.insn_flow unimplemented"
+  let to_symconst op = 
+    begin match op with 
+    | Id i -> UidM.find_or SymConst.UndefConst d i 
+    | Const i -> SymConst.Const i 
+    | _ -> SymConst.NonConst
+    end in 
+
+  let merge s1 s2 =
+    match s1, s2 with
+    | SymConst.NonConst, _ | _, SymConst.NonConst -> SymConst.NonConst
+    | SymConst.Const i, SymConst.Const j when Int64.compare i j == 0 -> SymConst.Const i
+    | SymConst.Const _, SymConst.Const _ -> SymConst.NonConst
+    | SymConst.UndefConst, i | i, SymConst.UndefConst -> i in 
+
+  let binop b op1 op2 = 
+    begin match b, op1, op2 with 
+    | _, SymConst.NonConst, _ | _, _, SymConst.NonConst -> SymConst.NonConst 
+    | _, SymConst.UndefConst, _ | _, _, SymConst.UndefConst -> SymConst.UndefConst 
+    | Add, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.add i1 i2) 
+    | Sub, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.sub i1 i2)
+    | Mul, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.mul i1 i2)  
+    | Shl, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.shift_left i1 (Int64.to_int i2))
+    | Lshr, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.shift_right_logical i1 (Int64.to_int i2)) 
+    | Ashr, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.shift_right i1 (Int64.to_int i2))  
+    | And, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.logand i1 i2)  
+    | Or, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.logor i1 i2)  
+    | Xor, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (Int64.logxor i1 i2)   
+    end in 
+
+  let icmp cond op1 op2 = 
+    let to_int64_bool = function | true -> 1L | false -> 0L in 
+    begin match cond, op1, op2 with  
+    | _, SymConst.NonConst, _ | _, _, SymConst.NonConst -> SymConst.NonConst 
+    | _, SymConst.UndefConst, _ | _, _, SymConst.UndefConst -> SymConst.UndefConst 
+    | Eq, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 == 0))
+    | Ne, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 != 0))
+    | Slt, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 < 0))
+    | Sle, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 <= 0)) 
+    | Sgt, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 > 0))
+    | Sge, SymConst.Const i1, SymConst.Const i2 -> SymConst.Const (to_int64_bool (Int64.compare i1 i2 >= 0))
+    end in 
+
+  let process_insn ins = 
+    (match i with 
+      | Binop (b, _, op1, op2) -> binop b (to_symconst op1) (to_symconst op2) 
+      | Icmp (b, _, op1, op2) -> icmp b (to_symconst op1) (to_symconst op2) 
+      | Store _ | Call (Void, _, _) -> SymConst.UndefConst 
+      | _ -> SymConst.NonConst 
+    ) in 
+  
+  UidM.update_or SymConst.UndefConst (merge @@ process_insn i) u d
 
 (* The flow function across terminators is trivial: they never change const info *)
 let terminator_flow (t:terminator) (d:fact) : fact = d
@@ -63,7 +113,23 @@ module Fact =
     (* The constprop analysis should take the meet over predecessors to compute the
        flow into a node. You may find the UidM.merge function useful *)
     let combine (ds:fact list) : fact = 
-      failwith "Constprop.Fact.combine unimplemented"
+      let combine_aux d1 d2 =
+        let merge s1 s2 =
+          match s1, s2 with
+          | SymConst.NonConst, _ | _, SymConst.NonConst -> SymConst.NonConst
+          | SymConst.Const i, SymConst.Const j when Int64.compare i j == 0 -> SymConst.Const i
+          | SymConst.Const _, SymConst.Const _ -> SymConst.NonConst
+          | SymConst.UndefConst, i | i, SymConst.UndefConst -> i in 
+        
+        let merge_function k xo yo = 
+          begin match xo, yo with 
+          | None, yo | yo, None -> yo 
+          | Some x, Some y -> Some (merge x y) 
+          end in 
+        
+        UidM.merge merge_function d1 d2
+      in
+      List.fold_left combine_aux UidM.empty ds
   end
 
 (* instantiate the general framework ---------------------------------------- *)
@@ -85,18 +151,56 @@ let analyze (g:Cfg.t) : Graph.t =
   let fg = Graph.of_cfg init cp_in g in
   Solver.solve fg
 
-
+let counter = ref 0
 (* run constant propagation on a cfg given analysis results ----------------- *)
 (* HINT: your cp_block implementation will probably rely on several helper 
    functions.                                                                 *)
+
+   (* BLM GUA GANTI PART INI.. *)
 let run (cg:Graph.t) (cfg:Cfg.t) : Cfg.t =
   let open SymConst in
   
+  let cp_op d o =
+    match o with
+    | Null | Const _ | Gid _ -> o
+    | Id u -> match UidM.find_or UndefConst d u with
+              | Const n -> incr counter; Ll.Const n
+              | _ -> o
+  in
+
+  let cp_terminator cb (id, t) : uid * terminator =
+    let f = cp_op (cb id) in
+    match t with
+    | Ret (t, Some o) -> id, Ret (t, Some (f o))
+    | Cbr (o, k, l)   -> id, Cbr (f o, k, l)
+    | Ret (_, None)
+    | Br _            -> id, t
+  in
+
+  let cp_insn cb (u,i) = 
+    let f = cp_op (cb u) in
+    u, match i with
+       | Alloca _          -> i
+       | Binop (bop,t,o,p) -> Binop (bop,t,f o, f p)
+       | Load (t,o)        -> Load (t, f o)
+       | Store (t,o,p)     -> Store (t, f o, f p)
+       | Icmp (cnd,t,o,p)  -> Icmp (cnd, t, f o, f p)
+       | Call (t,o,args)   -> Call (t, f o, List.map (fun (t,o) -> t, f o) args)
+       | Bitcast (s,o,t)   -> Bitcast (s, f o, t)
+       | Gep (t,o,os)      -> Gep (t, f o, List.map f os)
+  in
+  counter := 0;
+  (* STUBWITH *)
 
   let cp_block (l:Ll.lbl) (cfg:Cfg.t) : Cfg.t =
     let b = Cfg.block cfg l in
     let cb = Graph.uid_out cg l in
-    failwith "Constprop.cp_block unimplemented"
+    (* SOLN *)
+    let insns = List.map (cp_insn cb) b.insns in
+    let term = cp_terminator cb b.term in
+    Cfg.add_block l {insns; term} cfg
+    (* STUBWITH failwith "Constprop.cp_block unimplemented" *)
   in
+
 
   LblS.fold cp_block (Cfg.nodes cfg) cfg
