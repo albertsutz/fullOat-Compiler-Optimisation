@@ -24,7 +24,22 @@ open Datastructures
 let dce_block (lb:uid -> Liveness.Fact.t) 
               (ab:uid -> Alias.fact)
               (b:Ll.block) : Ll.block =
-  failwith "Dce.dce_block unimplemented"
+  let {insns; term} = b in 
+  let aux_func (cur_uid, cur_insn) = 
+    begin match cur_insn with
+    | Call _ -> true
+    | Store(_, _, Id op_uid) -> 
+      let retrieve_set = lb cur_uid in 
+      let retrieve_map = ab cur_uid in 
+      (UidM.find_or (Alias.SymPtr.MayAlias) (retrieve_map) (op_uid)) = Alias.SymPtr.MayAlias ||
+      UidS.find_opt (op_uid) (retrieve_set) != None
+    | _ -> 
+      let retrieve_set = lb cur_uid in 
+      UidS.find_opt (cur_uid) (retrieve_set) != None
+    end in
+  let filtered_insns = List.filter (aux_func) (insns) in 
+  {insns= filtered_insns; term}
+  (* failwith "dce not implemented" *)
 
 let run (lg:Liveness.Graph.t) (ag:Alias.Graph.t) (cfg:Cfg.t) : Cfg.t =
 
