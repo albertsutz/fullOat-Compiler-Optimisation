@@ -21,6 +21,7 @@ open Datastructures
 
    Hint: Consider using List.filter
  *)
+
 let dce_block (lb:uid -> Liveness.Fact.t) 
               (ab:uid -> Alias.fact)
               (b:Ll.block) : Ll.block =
@@ -28,11 +29,15 @@ let dce_block (lb:uid -> Liveness.Fact.t)
   let aux_func (cur_uid, cur_insn) = 
     begin match cur_insn with
     | Call _ -> true
-    | Store(_, _, Id op_uid) -> 
-      let retrieve_set = lb cur_uid in 
-      let retrieve_map = ab cur_uid in 
-      (UidM.find_or (Alias.SymPtr.MayAlias) (retrieve_map) (op_uid)) = Alias.SymPtr.MayAlias ||
-      UidS.find_opt (op_uid) (retrieve_set) != None
+    | Store(_, _, op2) -> 
+      begin match op2 with
+      | Id op_uid -> 
+        let retrieve_set = lb cur_uid in 
+        let retrieve_map = ab cur_uid in 
+        (UidM.find_or (Alias.SymPtr.MayAlias) (retrieve_map) (op_uid)) = Alias.SymPtr.MayAlias ||
+        UidS.find_opt (op_uid) (retrieve_set) != None
+      | _ -> true
+      end
     | _ -> 
       let retrieve_set = lb cur_uid in 
       UidS.find_opt (cur_uid) (retrieve_set) != None
