@@ -1,3 +1,9 @@
+# Task Description
+https://ilyasergey.net/CS4212/hw06_optimisations.html
+
+please refer to the link above for the full description of the project.
+
+
 ## Using main runner (updated for optimizations)
 
 The runner `main.native` acts like the `clang` compiler. Given several
